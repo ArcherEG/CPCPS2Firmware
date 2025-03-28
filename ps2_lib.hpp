@@ -23,6 +23,7 @@ class PS2 {
     uint8_t readByte();
     void sendByte(uint8_t byte_code);
     bool available();
+    uint8_t executeCommand();
 
   private:
     void waitHigh();
@@ -30,37 +31,48 @@ class PS2 {
     void generateClockPulse();
     bool readBitWithClock();
     void sendACK();
+    uint8_t led_status;
 };
 
+
 void PS2::sendACK() {
-  delayMicroseconds(500);
+  delayMicroseconds(800);
   sendByte(0xFA);
 }
 
+
+uint8_t PS2::executeCommand() {
+  uint8_t scancode = 0x00;
+  
+  uint8_t cmd = readByte();
+
+  if (cmd == 0xFF) {
+    sendACK();
+    delay(100);
+    sendByte(0xAA);
+  } else if (cmd == 0xF0) {
+    sendACK();
+    scancode = readByte();
+    sendACK();
+  } else if (cmd = 0xED) {
+    sendACK();
+    led_status = readByte();
+    delay(10);
+    sendACK();
+  } else {
+    sendACK();
+  }
+
+  return cmd;
+}
+
+
 void PS2::init() {
   uint8_t scancode = 0x00;
-  uint8_t led_status = 0xFF;
+  led_status = 0xFF;
 
   while (led_status == 0xFF) {
-    if (available()) {
-      uint8_t cmd = readByte();
-
-      if (cmd == 0xFF) {
-        sendACK();
-        delay(100);
-        sendByte(0xAA);
-      } else if (cmd == 0xF0) {
-        sendACK();
-        scancode = readByte();
-        sendACK();
-      } else if (cmd = 0xED) {
-        sendACK();
-        led_status = readByte();
-        sendACK();
-      } else {
-        sendACK();
-      }
-    }
+    if (available()) executeCommand();
   }
 }
 
@@ -172,6 +184,7 @@ uint8_t PS2::readByte() {
 
   return data;
 }
+
 
 
 
