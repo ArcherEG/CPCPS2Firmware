@@ -18,7 +18,7 @@
  ******************************************************************************************/
 #include "ps2_lib.hpp"
 
-#define VERSION 1.0
+#define VERSION 1.0.1
 
 #define BYTE_SEND_WAIT 200
 
