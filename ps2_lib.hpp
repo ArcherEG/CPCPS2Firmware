@@ -46,15 +46,15 @@ uint8_t PS2::executeCommand() {
   
   uint8_t cmd = readByte();
 
-  if (cmd == 0xFF) {
+  if (cmd == 0xFF) {          // Reset
     sendACK();
     delay(100);
     sendByte(0xAA);
-  } else if (cmd == 0xF0) {
+  } else if (cmd == 0xF0) {   // Set/Get Scan Code Set
     sendACK();
     scancode = readByte();
     sendACK();
-  } else if (cmd = 0xED) {
+  } else if (cmd = 0xED) {    // Set/Reset LEDs
     sendACK();
     led_status = readByte();
     delay(10);
@@ -67,12 +67,16 @@ uint8_t PS2::executeCommand() {
 }
 
 
+#define INIT_TIMEOUT 850
 void PS2::init() {
   uint8_t scancode = 0x00;
   led_status = 0xFF;
 
+  unsigned long previousMillis = 0;
   while (led_status == 0xFF) {
+    if (previousMillis == 0) previousMillis = millis();
     if (available()) executeCommand();
+    if (millis() - previousMillis >= INIT_TIMEOUT) break;
   }
 }
 
