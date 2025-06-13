@@ -15,24 +15,57 @@
 #define TIMEOUT 30
 
 
+
+const uint16_t PS2_REPEAT_DELAYS_MAP[] = {250, 500, 750, 1000};
+
+const uint16_t PS2_REPEAT_RATES_MAP[] = {
+    33, 37, 42, 45, 50, 55, 60, 66,
+    75, 83, 90, 100, 111, 125, 142, 166,
+    200, 250, 333, 400, 500, 666, 1000, 1250, 
+    1666, 2000, 2500, 3000, 3333, 4000, 5000, 6666
+};
+
+
 class PS2 {
   public:
-    void init();
     void setListenMode();
     void setSendMode();
     uint8_t readByte();
     void sendByte(uint8_t byte_code);
     bool available();
     uint8_t executeCommand();
-
+    void setRepeatTimes(uint8_t);
+    uint16_t getRepeatDelay() const { return _repeat_delay_ms; }
+    uint16_t getRepeatRate() const { return _repeat_rate_ms; }
+    
   private:
     void waitHigh();
     void sendBit(bool bit);
     void generateClockPulse();
     bool readBitWithClock();
     void sendACK();
-    uint8_t led_status;
+    uint8_t _led_status;
+    uint16_t _repeat_delay_ms;
+    uint16_t _repeat_rate_ms;
 };
+
+
+void PS2::setRepeatTimes(uint8_t cfg) {
+    uint8_t delay_index = (cfg >> 5) & 0x03;
+    uint8_t rate_index = cfg & 0x1F;
+
+    if (delay_index < sizeof(PS2_REPEAT_DELAYS_MAP) / sizeof(PS2_REPEAT_DELAYS_MAP[0])) {
+        _repeat_delay_ms = PS2_REPEAT_DELAYS_MAP[delay_index];
+    } else {
+        _repeat_delay_ms = PS2_REPEAT_DELAYS_MAP[0];
+    }
+
+    if (rate_index < sizeof(PS2_REPEAT_RATES_MAP) / sizeof(PS2_REPEAT_RATES_MAP[0])) {
+        _repeat_rate_ms = PS2_REPEAT_RATES_MAP[rate_index];
+    } else {
+        _repeat_rate_ms = PS2_REPEAT_RATES_MAP[0];
+    }
+}
 
 
 void PS2::sendACK() {
@@ -54,30 +87,22 @@ uint8_t PS2::executeCommand() {
     sendACK();
     scancode = readByte();
     sendACK();
-  } else if (cmd = 0xED) {    // Set/Reset LEDs
+  } else if (cmd == 0xED) {   // Set/Reset LEDs
     sendACK();
-    led_status = readByte();
+    _led_status = readByte();
     delay(10);
     sendACK();
+  } else if(cmd == 0xF3) {    // Set Typematic Rate and Delay
+    sendACK();
+    uint8_t cfg = readByte();
+    delay(10);
+    sendACK();
+    setRepeatTimes(cfg);
   } else {
     sendACK();
   }
 
   return cmd;
-}
-
-
-#define INIT_TIMEOUT 850
-void PS2::init() {
-  uint8_t scancode = 0x00;
-  led_status = 0xFF;
-
-  unsigned long previousMillis = 0;
-  while (led_status == 0xFF) {
-    if (previousMillis == 0) previousMillis = millis();
-    if (available()) executeCommand();
-    if (millis() - previousMillis >= INIT_TIMEOUT) break;
-  }
 }
 
 

@@ -18,9 +18,15 @@
  ******************************************************************************************/
 #include "ps2_lib.hpp"
 
-#define VERSION 1.0.1
-
+#define VERSION 1.0.3
 #define BYTE_SEND_WAIT 200
+
+uint8_t last_key_offset = 0;
+uint8_t last_key_scancode = 0;
+bool key_repeat = false;
+
+uint32_t last_key_trigger_time = 0;
+
 
 const uint8_t scancode[160] = {
   // Layout 1
@@ -78,6 +84,7 @@ bool key_status[80];
 
 PS2 kbd;
 
+
 void sendPS2Key(byte key_code) {
   uint8_t key_extended = scancode_extended[key_code];
   if (key_extended) {
@@ -113,8 +120,6 @@ void activeCol(int row) {
   PORTB &= ~portb_mask;
 }
 
-unsigned char ledStatus = 0;
-
 
 void setup() {
   DDRB |= 0x3F;
@@ -126,10 +131,12 @@ void setup() {
   PORTD = 0xFF;
 
   pinMode(A6, INPUT);
+  kbd.setRepeatTimes(0x42);   // Delay = 500ms, Rate = 20.7Hz
   delay(10);
 }
 
-void loop() {
+
+void loop() { 
   int fn_key_status = analogRead(A6);
 
   uint8_t fn_page = 0;
@@ -138,30 +145,63 @@ void loop() {
   }
 
   if (kbd.available()) kbd.executeCommand();
- 
+
+  // --- Keyboard Matrix Scan Function ---
+  // This loop scans a 10x8 keyboard matrix to detect the state of each key.
+  // It uses direct port reading (PIND) to determine if a key is pressed,
+  // and manages sending corresponding PS/2 scancodes (make and break) to the system.
   for (int row = 0; row < 10; row++) {
     int rowm = row * 8;
+    
     activeCol(row);
 
     for (int col = 0; col < 8; col++) {
       uint8_t estadoPuertoD = PIND;
       uint8_t estadoInvertido = ~estadoPuertoD;
       uint8_t x_col = (estadoInvertido >> col) & 0x01;
-
       uint8_t offset = rowm + col;
       uint8_t scancode_offset = offset + fn_page;
       
-      if (x_col) {
+      // --- Key Detection Logic ---
+      if (x_col) { // If the column bit is 1, it means the key is pressed.
         if (!key_status[offset]) {
           sendPS2Key(scancode_offset);
           key_status[offset] = true;
+          
+          // Stores information about the last pressed key for repeat logic.
+          last_key_offset = offset;
+          last_key_scancode = scancode_offset;
+
+          last_key_trigger_time = millis();
+          key_repeat = false;
         }
-      } else {
+      } else { // If the column bit is 0, the key is not pressed.
         if (key_status[offset]) {
           sendPS2BreakKey(scancode_offset);
           key_status[offset] = false;
+          
+          last_key_offset = 0;
+          last_key_scancode = 0;
+          last_key_trigger_time = 0;
         }
       }
+    }
+  }
+
+  // --- Key Repetition Management ---
+  // This block of code manages the automatic repetition of a key when it's held down.
+  // It implements a standard keyboard behavior: an initial delay before the first repeat,
+  // followed by a faster, continuous repetition rate.
+  if (key_status[last_key_offset]) {
+    uint32_t current_time = millis();
+    uint32_t elapsed_time = current_time - last_key_trigger_time;
+
+    uint16_t time_delay = key_repeat ? kbd.getRepeatRate() : kbd.getRepeatDelay();
+
+    if (elapsed_time > time_delay) {
+      last_key_trigger_time = millis();
+      key_repeat = true;
+      sendPS2Key(last_key_scancode);
     }
   }
 }
